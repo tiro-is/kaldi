@@ -7,7 +7,6 @@ endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH}")
 include(GNUInstallDirs)
 include(Utils)
-include(third_party/get_third_party)
 
 find_package(PythonInterp)
 if(NOT PYTHON_EXECUTABLE)
@@ -52,6 +51,12 @@ endif()
 option(KALDI_BUILD_EXE "If disabled, will make add_kaldi_executable a no-op" ON)
 option(KALDI_BUILD_TEST "If disabled, will make add_kaldi_test_executable a no-op" ON)
 option(KALDI_USE_PATCH_NUMBER "Use MAJOR.MINOR.PATCH format, otherwise MAJOR.MINOR" OFF)
+option(KALDI_USE_SYSTEM_LIBRARIES "Prefer using installed versions of CUB and OpenFst" OFF)
+
+if (NOT KALDI_USE_SYSTEM_LIBRARIES)
+    include(third_party/get_third_party)
+endif()
+
 
 if (KALDI_BUILD_TEST)
     include(CTest)
@@ -155,8 +160,10 @@ if(CUDA_FOUND)
     include_directories(${NvToolExt_INCLUDE_DIR})
     link_libraries(${NvToolExt_LIBRARIES})
 
-    get_third_party(cub)
-    set(CUB_ROOT_DIR "${CMAKE_BINARY_DIR}/cub")
+    if (NOT KALDI_USE_SYSTEM_LIBRARIES)
+        get_third_party(cub)
+        set(CUB_ROOT_DIR "${CMAKE_BINARY_DIR}/cub")
+    endif()
     find_package(CUB REQUIRED)
     include_directories(${CUB_INCLUDE_DIR})
 endif()
@@ -169,22 +176,15 @@ if(${KALDI_USE_PATCH_NUMBER})
     set(KALDI_VERSION "${KALDI_VERSION}.${KALDI_PATCH_NUMBER}")
 endif()
 
-# get_third_party(openfst)
-# set(OPENFST_ROOT_DIR ${CMAKE_BINARY_DIR}/openfst)
-# include(third_party/openfst_lib_target)
-find_library(OpenFST_LIBRARY
-            NAMES fst 
-            PATHS ${CMAKE_SOURCE_DIR}/tools/openfst/lib 
-            REQUIRED)
-find_path(OpenFST_INCLUDE_DIR
-            NAMES "fst/fst.h" 
-            PATHS "${CMAKE_SOURCE_DIR}/tools/openfst/include"
-            REQUIRED)
-get_filename_component(OpenFST_LIBRARY_DIR ${OpenFST_LIBRARY} DIRECTORY CACHE)
-mark_as_advanced(FORCE OpenFST_INCLUDE_DIR OpenFST_LIBRARY OpenFST_LIBRARY_DIR)
-include_directories(${OpenFST_INCLUDE_DIR})
-link_directories(${OpenFST_LIBRARY_DIR})
-link_libraries(fst)
+if (KALDI_USE_SYSTEM_LIBRARIES)
+    find_package(OpenFst REQUIRED)
+    link_libraries(${OpenFst_LIBRARIES})
+else()
+    get_third_party(openfst)
+    set(OPENFST_ROOT_DIR ${CMAKE_BINARY_DIR}/openfst)
+    include(third_party/openfst_lib_target)
+    link_libraries(fst)
+endif ()
 
 # add all native libraries
 add_subdirectory(src/base) # NOTE, we need to patch the target with version from outside
