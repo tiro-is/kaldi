@@ -24,6 +24,7 @@
 #include <cstdlib>
 #include <cstring>  // C string stuff like strcpy
 #include <string>
+#include <string_view>
 #include <sstream>
 #include <stdexcept>
 #include <cassert>
