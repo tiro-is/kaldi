@@ -1,7 +1,7 @@
 // cudadecoder/cuda-decoder.h
 //
 // Copyright (c) 2019, NVIDIA CORPORATION.  All rights reserved.
-// Hugo Braun, Justin Luitjens, Ryan Leary
+// Hugo Braun, Justin Luitjens, Ryan Leary, Daniel Galvez
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,18 +15,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef KALDI_CUDA_DECODER_THREAD_POOL_LIGHT_H_
-#define KALDI_CUDA_DECODER_THREAD_POOL_LIGHT_H_
-
-#define KALDI_CUDA_DECODER_THREAD_POOL_QUEUE_FULL_WAIT_FOR_US 1000
+#ifndef KALDI_CUDADECODER_THREAD_POOL_LIGHT_H_
+#define KALDI_CUDADECODER_THREAD_POOL_LIGHT_H_
 
 #include <atomic>
 #include <thread>
 #include <vector>
+
 #include "util/stl-utils.h"
 
 namespace kaldi {
 namespace cuda_decoder {
+
+const double kSleepForWorkerAvailable = 1e-3;
 
 struct ThreadPoolLightTask {
   void (*func_ptr)(void *, uint64_t, void *);
@@ -87,11 +88,17 @@ class ThreadPoolLightWorker {
   std::unique_ptr<std::thread> thread_;
   bool run_thread_;
   ThreadPoolLightTask curr_task_;
-  std::shared_ptr<ThreadPoolLightWorker> other_;
+  std::weak_ptr<ThreadPoolLightWorker> other_;
 
   void Work() {
     while (run_thread_) {
-      if (queue_.TryPop(&curr_task_) || other_->TrySteal(&curr_task_)) {
+      bool got_task = queue_.TryPop(&curr_task_);
+      if (!got_task) {
+          if (auto other_sp = other_.lock()) {
+              got_task = other_sp->TrySteal(&curr_task_);
+          }
+      }
+      if (got_task) {
         // Not calling func_ptr as a member function,
         // because we need to specialize the arguments
         // anyway (we may want to ignore arg2, for
@@ -99,7 +106,7 @@ class ThreadPoolLightWorker {
         (curr_task_.func_ptr)(curr_task_.obj_ptr, curr_task_.arg1,
                               curr_task_.arg2);
       } else {
-        usleep(1000);  // TODO
+        Sleep(1e-3f);  // TODO
       }
     }
   }
@@ -111,15 +118,15 @@ class ThreadPoolLightWorker {
   bool TrySteal(ThreadPoolLightTask *task) { return queue_.TryPop(task); }
 
  public:
-  ThreadPoolLightWorker() : run_thread_(true), other_(NULL) {}
+  ThreadPoolLightWorker() : run_thread_(true), other_() {}
   virtual ~ThreadPoolLightWorker() { Stop(); }
   bool TryPush(const ThreadPoolLightTask &task) { return queue_.TryPush(task); }
   void SetOtherWorkerToStealFrom(
-      const std::shared_ptr<ThreadPoolLightWorker> other) {
+      const std::shared_ptr<ThreadPoolLightWorker>& other) {
     other_ = other;
   }
   void Start() {
-    KALDI_ASSERT("Please call SetOtherWorkerToStealFrom() first" && other_);
+    KALDI_ASSERT("Please call SetOtherWorkerToStealFrom() first" && !other_.expired());
     thread_.reset(new std::thread(&ThreadPoolLightWorker::Work, this));
   }
   void Stop() {
@@ -159,11 +166,11 @@ class ThreadPoolLight {
   void Push(const ThreadPoolLightTask &task) {
     // Could try another curr_iworker_
     while (!TryPush(task))
-      usleep(KALDI_CUDA_DECODER_THREAD_POOL_QUEUE_FULL_WAIT_FOR_US);
+      Sleep(kSleepForWorkerAvailable);
   }
 };
 
 }  // end namespace cuda_decoder
 }  // end namespace kaldi
 
-#endif  // KALDI_CUDA_DECODER_THREAD_POOL_H_
+#endif  // KALDI_CUDADECODER_THREAD_POOL_H_

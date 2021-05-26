@@ -15,16 +15,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <unordered_map>
-#if HAVE_CUDA == 1
+#ifndef KALDI_CUDADECODER_CUDA_ONLINE_PIPELINE_DYNAMIC_BATCHER_H_
+#define KALDI_CUDADECODER_CUDA_ONLINE_PIPELINE_DYNAMIC_BATCHER_H_
 
-#ifndef KALDI_CUDA_DECODER_DYNAMIC_BATCHER_H_
-#define KALDI_CUDA_DECODER_DYNAMIC_BATCHER_H_
+#if HAVE_CUDA
 
 #include <atomic>
 #include <mutex>
 #include <queue>
 #include <thread>
+#include <unordered_map>
 
 #include "cudadecoder/batched-threaded-nnet3-cuda-online-pipeline.h"
 
@@ -36,8 +36,24 @@ struct CudaOnlinePipelineDynamicBatcherConfig {
 };
 
 class CudaOnlinePipelineDynamicBatcher {
+ public:
   typedef BatchedThreadedNnet3CudaOnlinePipeline::CorrelationID CorrelationID;
 
+  CudaOnlinePipelineDynamicBatcher(
+      CudaOnlinePipelineDynamicBatcherConfig config,
+      BatchedThreadedNnet3CudaOnlinePipeline &cuda_pipeline);
+
+  virtual ~CudaOnlinePipelineDynamicBatcher();
+
+  // Push a new chunk to the dynamic batcher
+  // the wave_samples will be deep copied,
+  // the caller can safely reuse or free wave_samples's storage after Push's
+  // return
+  void Push(CorrelationID corr_id, bool is_first_chunk, bool is_last_chunk,
+            const SubVector<BaseFloat> &wave_samples);
+  void WaitForCompletion();
+
+ private:
   // Batches created by this Batcher
   struct Batch {
     std::vector<CorrelationID> corr_ids;
@@ -70,6 +86,7 @@ class CudaOnlinePipelineDynamicBatcher {
       is_first_chunk.push_back(is_first);
       is_last_chunk.push_back(is_last);
       int nsamples = samples.Dim();
+      KALDI_ASSERT(nsamples <= h_all_waveform.NumCols());
       const BaseFloat *wave_src = samples.Data();
       BaseFloat *wave_dst = h_all_waveform.RowData(idx);
       std::memcpy(wave_dst, wave_src, nsamples * sizeof(BaseFloat));
@@ -79,22 +96,13 @@ class CudaOnlinePipelineDynamicBatcher {
     size_t Size() { return corr_ids.size(); }
   };
 
- public:
-  CudaOnlinePipelineDynamicBatcher(
-      CudaOnlinePipelineDynamicBatcherConfig config,
-      BatchedThreadedNnet3CudaOnlinePipeline &cuda_pipeline);
+  struct Chunk {
+    CorrelationID corr_id;
+    bool is_first_chunk;
+    bool is_last_chunk;
+    Vector<BaseFloat> wave_samples;  // deep copy, owns data
+  };
 
-  virtual ~CudaOnlinePipelineDynamicBatcher();
-
-  // Push a new chunk to the dynamic batcher
-  // the wave_samples will be deep copied,
-  // the caller can safely reuse or free wave_samples's storage after Push's
-  // return
-  void Push(CorrelationID corr_id, bool is_first_chunk, bool is_last_chunk,
-            const SubVector<BaseFloat> &wave_samples);
-  void WaitForCompletion();
-
- private:
   // Either add to next_batch_ or to backlog_
   bool TryAddChunkToNextBatchDeepCopy(
       CorrelationID corr_id, bool is_first_chunk, bool is_last_chunk,
@@ -106,12 +114,6 @@ class CudaOnlinePipelineDynamicBatcher {
   void FillNextBatchWithBacklog();
 
   CudaOnlinePipelineDynamicBatcherConfig config_;
-  struct Chunk {
-    CorrelationID corr_id;
-    bool is_first_chunk;
-    bool is_last_chunk;
-    Vector<BaseFloat> wave_samples;  // deep copy, owns data
-  };
 
   void BatcherThreadLoop();
   std::list<Chunk> backlog_;
@@ -131,8 +133,8 @@ class CudaOnlinePipelineDynamicBatcher {
   std::unique_ptr<Batch> curr_batch_, next_batch_;
 };
 
-}  // end namespace cuda_decoder
-}  // end namespace kaldi.
+}  // namespace cuda_decoder
+}  // namespace kaldi
 
-#endif  // KALDI_CUDA_DECODER_DYNAMIC_BATCHER_H_
 #endif  // HAVE_CUDA
+#endif  // KALDI_CUDADECODER_CUDA_ONLINE_PIPELINE_DYNAMIC_BATCHER_H_
