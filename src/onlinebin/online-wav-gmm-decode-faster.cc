@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
     decoder_opts.Register(&po, true);
     OnlineFeatureMatrixOptions feature_reading_opts;
     feature_reading_opts.Register(&po);
-    
+
     po.Register("left-context", &left_context, "Number of frames of left context");
     po.Register("right-context", &right_context, "Number of frames of right context");
     po.Register("acoustic-scale", &acoustic_scale,
@@ -83,7 +83,7 @@ int main(int argc, char *argv[]) {
       po.PrintUsage();
       return 1;
     }
-    
+
     std::string wav_rspecifier = po.GetArg(1),
         model_rspecifier = po.GetArg(2),
         fst_rspecifier = po.GetArg(3),
@@ -196,9 +196,9 @@ int main(int argc, char *argv[]) {
           std::vector<int32> word_ids;
           decoder.FinishTraceBack(&out_fst);
           fst::GetLinearSymbolSequence(out_fst,
-                                       static_cast<std::vector<int32> *>(0),
+                                       static_cast<std::vector<int32> *>(nullptr),
                                        &word_ids,
-                                       static_cast<LatticeArc::Weight*>(0));
+                                       static_cast<LatticeArc::Weight*>(nullptr));
           PrintPartialResult(word_ids, word_syms, partial_res || word_ids.size());
           partial_res = false;
 
@@ -207,7 +207,7 @@ int main(int argc, char *argv[]) {
           fst::GetLinearSymbolSequence(out_fst,
                                        &tids,
                                        &word_ids,
-                                       static_cast<LatticeArc::Weight*>(0));
+                                       static_cast<LatticeArc::Weight*>(nullptr));
           std::stringstream res_key;
           res_key << wav_key << '_' << start_frame << '-' << decoder.frame();
           if (!word_ids.empty())
@@ -220,9 +220,9 @@ int main(int argc, char *argv[]) {
           std::vector<int32> word_ids;
           if (decoder.PartialTraceback(&out_fst)) {
             fst::GetLinearSymbolSequence(out_fst,
-                                        static_cast<std::vector<int32> *>(0),
+                                        static_cast<std::vector<int32> *>(nullptr),
                                         &word_ids,
-                                        static_cast<LatticeArc::Weight*>(0));
+                                        static_cast<LatticeArc::Weight*>(nullptr));
             PrintPartialResult(word_ids, word_syms, false);
             if (!partial_res)
               partial_res = (word_ids.size() > 0);
