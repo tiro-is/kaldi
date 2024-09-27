@@ -571,9 +571,8 @@ void Supervision::Write(std::ostream &os, bool binary) const {
       // Write using StdAcceptorCompactFst, making use of the fact that it's an
       // acceptor.
       fst::FstWriteOptions write_options("<unknown>");
-      fst::StdCompactAcceptorFst(
-          fst).Write(os,
-          write_options);
+      fst::StdCompactAcceptorFst cfst(fst);
+      cfst.Write(os, write_options);
     }
   } else {
     KALDI_ASSERT(e2e_fsts.size() == num_sequences);
@@ -586,9 +585,8 @@ void Supervision::Write(std::ostream &os, bool binary) const {
         // Write using StdAcceptorCompactFst, making use of the fact that it's an
         // acceptor.
         fst::FstWriteOptions write_options("<unknown>");
-        fst::StdCompactAcceptorFst(
-            e2e_fsts[i]).Write(os,
-            write_options);
+        fst::StdCompactAcceptorFst cfst(e2e_fsts[i]);
+        cfst.Write(os, write_options);
       }
     }
     WriteToken(os, binary, "</Fsts>");
