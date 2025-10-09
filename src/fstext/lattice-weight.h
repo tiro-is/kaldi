@@ -764,8 +764,7 @@ inline std::istream &operator >>(std::istream &strm, CompactLatticeWeightTpl<Wei
   std::vector<IntType> string;
   const char *c = s2.c_str();
   while(*c != '\0') {
-    KALDI_ASSERT(std::string_view{kStringSeparator}.size() == 1);
-    if (std::string_view{c, 1} == std::string_view{kStringSeparator}) // '_'
+    if (*c == kStringSeparator) // '_'
       c++;
     char *c2;
     long int i = strtol(c, &c2, 10);
